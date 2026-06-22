@@ -124,8 +124,11 @@ export default class Sui {
 	/**
 	 * Sign a transaction with the key at a BIP32 path.
 	 *
-	 * @param txn - The transaction bytes to sign.
 	 * @param path - The path to use when signing the transaction.
+	 * @param txn - The raw BCS-encoded TransactionData bytes (as returned by `Transaction.build()`).
+	 *   Do NOT include the Sui intent prefix — this method prepends it automatically.
+	 *   The intent prefix ([0x00, 0x00, 0x00]) is required both for the Ledger app to display
+	 *   clear-signing details and for the resulting signature to be accepted by the Sui network.
 	 * @param options - Additional options used for clear signing purposes.
 	 * @param resolution - Additional data for token clear signing purposes.
 	 */
@@ -144,8 +147,14 @@ export default class Sui {
 
 		if (this.#verbose) this.#log(txn);
 
-		// Transaction payload is the byte length as uint32le followed by the bytes
-		const rawTxn = Buffer.from(txn);
+		// The Sui intent prefix must be prepended to the transaction bytes before signing.
+		// The Ledger app signs Blake2b(rawInput) directly, so callers should not need to
+		// know about the intent format. The device also uses this prefix to identify the
+		// data type and display clear-signing details; without it the device falls back to
+		// blind signing.
+		// Intent bytes: scope=TransactionData(0x00), version=V0(0x00), app=Sui(0x00)
+		const INTENT_PREFIX = Buffer.from([0x00, 0x00, 0x00]);
+		const rawTxn = Buffer.concat([INTENT_PREFIX, Buffer.from(txn)]);
 		const hashSize = Buffer.alloc(4);
 		hashSize.writeUInt32LE(rawTxn.length, 0);
 
